@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل موجودی شمع</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#f6f3ef;color:#2f2925}
+.app{max-width:1200px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}
+h1{margin:0;font-size:25px}.sub{color:#8a7c71;font-size:13px;margin-top:5px}
+button{border:0;border-radius:12px;padding:11px 15px;cursor:pointer;font-family:inherit}.primary{background:#3b3029;color:#fff}.danger{background:#f7dede;color:#9b3333}.ghost{background:#fff;border:1px solid #e7dfd7}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.card{background:#fff;border:1px solid #ebe3db;border-radius:17px;padding:17px}.label{font-size:12px;color:#8d8178}.num{font-size:25px;font-weight:bold;margin-top:7px}
+.panel{background:#fff;border:1px solid #ebe3db;border-radius:18px;padding:18px;margin-bottom:18px}.bar{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+input,select{padding:11px;border:1px solid #ded5cc;border-radius:11px;font-family:inherit;background:#fff}.search{min-width:250px}
+table{width:100%;border-collapse:collapse}th,td{padding:12px 8px;border-bottom:1px solid #eee7e1;text-align:right;font-size:13px}th{color:#87796e;font-weight:normal}
+.badge{padding:5px 9px;border-radius:20px;background:#e9f4ea;color:#3e7745;font-size:11px}.low{background:#fff0d7;color:#9a641d}.empty{background:#f9dddd;color:#a03333}
+.modal{position:fixed;inset:0;background:#0005;display:none;align-items:center;justify-content:center;padding:18px}.modal.show{display:flex}.box{background:#fff;border-radius:20px;padding:20px;width:min(520px,100%)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}.actions{display:flex;gap:8px;justify-content:flex-start;margin-top:15px}
+@media(max-width:800px){.cards{grid-template-columns:1fr 1fr}table{min-width:760px}.panel{overflow:auto}.bar{align-items:stretch}.search{width:100%}}@media(max-width:480px){.cards{grid-template-columns:1fr 1fr}.top{align-items:flex-start}.add-btn{width:100%;padding:14px;font-size:16px}.box{width:100%;max-height:92vh;overflow:auto}.grid{grid-template-columns:1fr}.full{grid-column:auto}input,select,button{font-size:16px;min-height:46px}.search{min-width:0}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div><h1>🕯️ پنل موجودی شمع</h1><div class="sub">مدیریت ساده و سریع موجودی مغازه</div></div>
+    <button type="button" class="primary add-btn" id="addBtn">＋ افزودن شمع</button>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">تعداد مدل‌ها</div><div class="num" id="models">0</div></div>
+    <div class="card"><div class="label">تعداد کل موجودی</div><div class="num" id="stock">0</div></div>
+    <div class="card"><div class="label">ارزش موجودی</div><div class="num" id="value">۰</div></div>
+    <div class="card"><div class="label">رو به اتمام</div><div class="num" id="low">0</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="bar">
+      <strong>📦 موجودی شمع‌ها</strong>
+      <div>
+        <input class="search" id="search" placeholder="جستجوی نام، رایحه یا کد..." oninput="render()">
+        <select id="filter" onchange="render()"><option value="all">همه</option><option value="low">رو به اتمام</option><option value="out">ناموجود</option></select>
+      </div>
+    </div>
+    <table><thead><tr><th>نام</th><th>کد</th><th>رایحه</th><th>رنگ</th><th>موجودی</th><th>قیمت فروش</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+    <tbody id="rows"></tbody></table>
+  </div>
+</div>
+
+<div class="modal" id="modal">
+<div class="box">
+<h3 id="modalTitle">افزودن شمع</h3>
+<input type="hidden" id="editId">
+<div class="grid">
+<input id="name" class="full" placeholder="نام شمع">
+<input id="code" placeholder="کد کالا">
+<input id="scent" placeholder="رایحه">
+<input id="color" placeholder="رنگ">
+<input id="qty" type="number" min="0" placeholder="موجودی">
+<input id="min" type="number" min="0" placeholder="حداقل موجودی">
+<input id="buy" type="number" min="0" placeholder="قیمت خرید">
+<input id="sell" type="number" min="0" placeholder="قیمت فروش">
+</div>
+<div class="actions"><button type="button" class="primary" id="saveBtn">ذخیره</button><button type="button" class="ghost" id="cancelBtn">انصراف</button></div>
+</div></div>
+
+<script>
+const KEY='candle_inventory_v1';
+let items=JSON.parse(localStorage.getItem(KEY)||'[]');
+const $=id=>document.getElementById(id);
+const money=n=>Number(n||0).toLocaleString('fa-IR');
+function saveStore(){localStorage.setItem(KEY,JSON.stringify(items))}
+function status(x){if(x.qty<=0)return ['ناموجود','empty']; if(x.qty<=x.min)return ['رو به اتمام','low']; return ['موجود','']}
+function render(){
+ let q=$('search').value.trim().toLowerCase(), f=$('filter').value;
+ let list=items.filter(x=>(x.name+' '+x.code+' '+x.scent).toLowerCase().includes(q));
+ if(f==='low')list=list.filter(x=>x.qty>0&&x.qty<=x.min);
+ if(f==='out')list=list.filter(x=>x.qty<=0);
+ $('models').textContent=items.length.toLocaleString('fa-IR');
+ $('stock').textContent=items.reduce((a,x)=>a+Number(x.qty||0),0).toLocaleString('fa-IR');
+ $('value').textContent=money(items.reduce((a,x)=>a+Number(x.qty||0)*Number(x.buy||0),0));
+ $('low').textContent=items.filter(x=>x.qty<=x.min).length.toLocaleString('fa-IR');
+ $('rows').innerHTML=list.length?list.map(x=>{let s=status(x);return `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.code)}</td><td>${esc(x.scent)}</td><td>${esc(x.color)}</td><td>${money(x.qty)}</td><td>${money(x.sell)} تومان</td><td><span class="badge ${s[1]}">${s[0]}</span></td><td><button type="button" class="ghost edit-btn" data-id="${x.id}">ویرایش</button> <button type="button" class="danger delete-btn" data-id="${x.id}">حذف</button></td></tr>`}).join(''):'<tr><td colspan="8" style="text-align:center;padding:35px;color:#999">هنوز کالایی ثبت نشده.</td></tr>';
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function openModal(id=null){
+ $('modal').classList.add('show'); $('modalTitle').textContent=id?'ویرایش شمع':'افزودن شمع';
+ $('editId').value=id||'';
+ let x=items.find(a=>a.id===id)||{name:'',code:'',scent:'',color:'',qty:'',min:3,buy:'',sell:''};
+ ['name','code','scent','color','qty','min','buy','sell'].forEach(k=>$(k).value=x[k]??'');
+}
+function closeModal(){$('modal').classList.remove('show')}
+function save(){
+ let id=$('editId').value||Date.now().toString();
+ let x={id}; ['name','code','scent','color','qty','min','buy','sell'].forEach(k=>x[k]=$(k).value);
+ if(!x.name.trim()){alert('نام شمع را وارد کن');return}
+ ['qty','min','buy','sell'].forEach(k=>x[k]=Number(x[k]||0));
+ let i=items.findIndex(a=>a.id===id); if(i>=0)items[i]=x; else items.push(x);
+ saveStore(); closeModal(); render();
+}
+function edit(id){openModal(id)}
+function del(id){if(confirm('این شمع حذف شود؟')){items=items.filter(x=>x.id!==id);saveStore();render()}}
+
+document.addEventListener('DOMContentLoaded', function(){
+  const addBtn = document.getElementById('addBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  addBtn.addEventListener('click', function(e){ e.preventDefault(); openModal(); });
+  saveBtn.addEventListener('click', function(e){ e.preventDefault(); save(); });
+  cancelBtn.addEventListener('click', function(e){ e.preventDefault(); closeModal(); });
+
+  document.getElementById('rows').addEventListener('click', function(e){
+    const editBtn = e.target.closest('.edit-btn');
+    const deleteBtn = e.target.closest('.delete-btn');
+    if(editBtn) edit(editBtn.dataset.id);
+    if(deleteBtn) del(deleteBtn.dataset.id);
+  });
+
+  document.getElementById('modal').addEventListener('click', function(e){
+    if(e.target === this) closeModal();
+  });
+});
+render();
+</script>
+</body>
+</html>
